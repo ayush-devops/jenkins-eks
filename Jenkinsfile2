@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+    environment {
+        registry = "321597822639.dkr.ecr.us-east-1.amazonaws.com/jenkins"
+    }
+    stages {
+        stage('checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/ayush-devops/jenkins-eks.git']])
+            }
+        }
+        stage('Build Jar'){
+            steps {
+                sh "mvn clean install"
+            }
+        }
+        stage('Build Docker Image'){
+            steps{ 
+                script{
+                dockerImage = docker.build registry 
+                dockerImage.tag("$BUILD_NUMBER")
+        }
+    }
+        
+}
+        stage('Pushing to ECR'){
+           steps{
+               script{
+               sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 321597822639.dkr.ecr.us-east-1.amazonaws.com'
+               sh 'docker push 321597822639.dkr.ecr.us-east-1.amazonaws.com/jenkins:$BUILD_NUMBER'
+          }
+       }
+      }
+        stage('helm deploy'){
+            steps{
+                script{
+                    sh 'aws eks update-kubeconfig --name eks-jenkins --region us-east-1'
+                    sh 'aws sts get-caller-identity'
+                    sh 'helm ls'
+                    sh 'helm upgrade first --install mychart --namespace helm-deployment --set image.tag=$BUILD_NUMBER'
+                }
+            }
+        }
+    }
+}
+
+       
+
